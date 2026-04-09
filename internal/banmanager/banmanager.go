@@ -242,6 +242,8 @@ func (m *Manager) IsBlocked(ip string) bool {
 
 		// 检查封禁是否过期
 		if time.Now().After(blocked.ExpiresAt) {
+			// 封禁已过期，自动解除封禁
+			m.unblockExpiredIP(ip)
 			return false
 		}
 
@@ -261,6 +263,8 @@ func (m *Manager) IsBlocked(ip string) bool {
 
 		// 再次检查封禁是否过期
 		if time.Now().After(blocked.ExpiresAt) {
+			// 封禁已过期，自动解除封禁
+			m.unblockExpiredIP(ip)
 			return false
 		}
 
@@ -289,6 +293,8 @@ func (m *Manager) IsBlocked(ip string) bool {
 
 	// 检查封禁是否过期
 	if time.Now().After(blocked.ExpiresAt) {
+		// 封禁已过期，自动解除封禁
+		m.unblockExpiredIP(ip)
 		return false
 	}
 
@@ -624,6 +630,38 @@ func (m *Manager) saveAllBlockedIPs() error {
 	}
 
 	return nil
+}
+
+// unblockExpiredIP 解除过期的 IP 封禁（内部方法，不验证 IP 格式）
+//
+// 参数:
+// - ip: IP 地址或 CIDR 网段
+func (m *Manager) unblockExpiredIP(ip string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// 检查 IP 是否仍在封禁记录中
+	if _, exists := m.ipBlocked[ip]; !exists {
+		return
+	}
+
+	// 从防火墙中解除封禁
+	if m.firewall != nil {
+		if err := m.firewall.UnblockIP(ip); err != nil {
+			m.logger.Error("从防火墙解除过期封禁失败", zap.String("ip", ip), zap.Error(err))
+			// 继续处理，不中断解除封禁过程
+		}
+	}
+
+	// 从封禁记录中删除
+	delete(m.ipBlocked, ip)
+
+	// 保存更新后的封禁记录
+	if err := m.saveAllBlockedIPs(); err != nil {
+		m.logger.Error("保存更新后的封禁记录失败", zap.Error(err))
+	}
+
+	m.logger.Info("已自动解除过期 IP 封禁", zap.String("ip", ip))
 }
 
 // UnblockIP 主动解除 IP 封禁

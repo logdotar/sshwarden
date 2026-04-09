@@ -193,11 +193,6 @@ sshwarden 提供了以下命令行命令：
   sudo ./sshwarden uninstall
   ```
 
-- **uninstall**：卸载 sshwarden 系统服务
-  ```bash
-  sudo ./sshwarden uninstall
-  ```
-
 - **block**：封禁指定 IP 地址或网段
   ```bash
   # 临时封禁指定 IP（使用配置文件中的封禁时间）

@@ -772,6 +772,35 @@ func (m *Manager) UpdateTimeSettings(findTime, banTime time.Duration) {
 				m.logger.Error("保存更新后的封禁记录失败", zap.Error(err))
 			}
 		}
+	} else if oldBanTime != -1 && banTime != -1 && oldBanTime != banTime {
+		// 当 banTime 从一个非 -1 值变为另一个非 -1 值时，更新所有非永久封禁 IP 的过期时间
+		now := time.Now()
+		updated := false
+		for ip, blockedIP := range m.ipBlocked {
+			// 检查是否为永久封禁
+			if !blockedIP.Permanent {
+				// 计算剩余的封禁时间
+				remainingTime := blockedIP.ExpiresAt.Sub(now)
+				if remainingTime > 0 {
+					// 如果还有剩余封禁时间，按比例调整
+					// 例如：原来剩余 3 分钟，banTime 从 5 分钟变为 10 分钟，则新的剩余时间为 6 分钟
+					ratio := float64(banTime) / float64(oldBanTime)
+					newRemainingTime := time.Duration(float64(remainingTime) * ratio)
+					blockedIP.ExpiresAt = now.Add(newRemainingTime)
+				} else {
+					// 如果已经过期，设置为新的 banTime
+					blockedIP.ExpiresAt = now.Add(banTime)
+				}
+				m.ipBlocked[ip] = blockedIP
+				updated = true
+			}
+		}
+		// 如果有更新，保存封禁记录
+		if updated {
+			if err := m.saveAllBlockedIPs(); err != nil {
+				m.logger.Error("保存更新后的封禁记录失败", zap.Error(err))
+			}
+		}
 	}
 
 	m.logger.Info("时间设置已更新", zap.Duration("findTime", findTime), zap.Duration("banTime", banTime))

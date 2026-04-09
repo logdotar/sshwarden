@@ -1,6 +1,7 @@
 package banmanager
 
 import (
+	"encoding/json"
 	"os"
 	"testing"
 	"time"
@@ -14,12 +15,12 @@ import (
 type mockFirewall struct{}
 
 // BlockIP 封禁 IP (空操作)
-func (m *mockFirewall) BlockIP(ip string) error {
+func (m *mockFirewall) BlockIP(string) error {
 	return nil
 }
 
 // UnblockIP 解除封禁 IP (空操作)
-func (m *mockFirewall) UnblockIP(ip string) error {
+func (m *mockFirewall) UnblockIP(string) error {
 	return nil
 }
 
@@ -274,6 +275,65 @@ func TestBanManager(t *testing.T) {
 		}
 	})
 
+	t.Run("UpdateTimeSettings_TemporaryBlock", func(t *testing.T) {
+		// 测试配置热重载时，临时封禁的 IP 过期时间会根据新的 banTime 调整
+		ip := "10.0.0.180"
+
+		// 先设置 banTime 为 5 分钟
+		mgr.UpdateTimeSettings(10*time.Minute, 5*time.Minute)
+
+		// 封禁 IP
+		if err := mgr.BlockIP(ip); err != nil {
+			t.Fatalf("封禁 IP 失败: %v", err)
+		}
+
+		// 检查 IP 是否被封禁
+		if !mgr.IsBlocked(ip) {
+			t.Errorf("IP 应该被封禁")
+		}
+
+		// 获取封禁详情，记录当前过期时间
+		blockedIPs := mgr.GetBlockedIPDetails()
+		var targetIP BlockedIP
+		for _, ipDetail := range blockedIPs {
+			if ipDetail.IP == ip {
+				targetIP = ipDetail
+				break
+			}
+		}
+
+		if targetIP.Permanent {
+			t.Errorf("IP 不应该被标记为永久封禁")
+		}
+
+		// 模拟配置热重载，将 banTime 从 5 分钟改为 10 分钟
+		mgr.UpdateTimeSettings(10*time.Minute, 10*time.Minute)
+
+		// 检查 IP 是否仍然被封禁
+		if !mgr.IsBlocked(ip) {
+			t.Errorf("IP 应该仍然被封禁")
+		}
+
+		// 再次获取封禁详情，检查过期时间是否更新
+		blockedIPs = mgr.GetBlockedIPDetails()
+		var updatedIP BlockedIP
+		for _, ipDetail := range blockedIPs {
+			if ipDetail.IP == ip {
+				updatedIP = ipDetail
+				break
+			}
+		}
+
+		if updatedIP.Permanent {
+			t.Errorf("IP 不应该被标记为永久封禁")
+		}
+
+		// 检查过期时间是否延长了
+		if !updatedIP.ExpiresAt.After(targetIP.ExpiresAt) {
+			t.Errorf("过期时间应该被延长，旧过期时间: %v, 新过期时间: %v", targetIP.ExpiresAt, updatedIP.ExpiresAt)
+		}
+	})
+
 	t.Run("CleanupExpired_PermanentBlock", func(t *testing.T) {
 		// 测试清理过期记录时，永久封禁的 IP 不会被清理
 		ip := "10.0.0.170"
@@ -429,6 +489,83 @@ func TestBanManager(t *testing.T) {
 		// 检查 IP 是否未被封禁
 		if mgr.IsBlocked(whitelistIP) {
 			t.Errorf("白名单中的 IP 不应该被封禁")
+		}
+	})
+
+	t.Run("IsBlocked_FileSync", func(t *testing.T) {
+		// 测试 IsBlocked 方法的文件同步功能
+		ip := "10.0.0.190"
+
+		// 先封禁 IP
+		if err := mgr.BlockIP(ip); err != nil {
+			t.Fatalf("封禁 IP 失败: %v", err)
+		}
+
+		// 检查 IP 是否被封禁
+		if !mgr.IsBlocked(ip) {
+			t.Errorf("IP 应该被封禁")
+		}
+
+		// 手动修改 blockedips.json 文件，移除该 IP
+		blockedIPs := mgr.GetBlockedIPDetails()
+		var newBlockedIPs []BlockedIP
+		for _, blockedIP := range blockedIPs {
+			if blockedIP.IP != ip {
+				newBlockedIPs = append(newBlockedIPs, blockedIP)
+			}
+		}
+
+		// 保存修改后的封禁记录
+		blockedIPsFile := BlockedIPs{
+			IPs: newBlockedIPs,
+		}
+
+		file, err := os.Create(mgr.blockedIPsFile)
+		if err != nil {
+			t.Fatalf("创建文件失败: %v", err)
+		}
+		defer func() {
+			if err := file.Close(); err != nil {
+				t.Logf("关闭文件失败: %v", err)
+			}
+		}()
+
+		if err := json.NewEncoder(file).Encode(blockedIPsFile); err != nil {
+			t.Fatalf("写入文件失败: %v", err)
+		}
+
+		// 再次检查 IP 是否被封禁（应该解除封禁）
+		if mgr.IsBlocked(ip) {
+			t.Errorf("IP 应该被解除封禁")
+		}
+	})
+
+	t.Run("LoadBlockedIPs_FileError", func(t *testing.T) {
+		// 测试 LoadBlockedIPs 方法的错误处理
+		// 手动创建一个格式错误的文件
+		file, err := os.Create(mgr.blockedIPsFile)
+		if err != nil {
+			t.Fatalf("创建文件失败: %v", err)
+		}
+		// 写入错误的 JSON 格式
+		if _, err := file.WriteString("invalid json"); err != nil {
+			t.Fatalf("写入文件失败: %v", err)
+		}
+		if err := file.Close(); err != nil {
+			t.Logf("关闭文件失败: %v", err)
+		}
+
+		// 调用 LoadBlockedIPs 方法，应该不会崩溃
+		if err := mgr.LoadBlockedIPs(); err != nil {
+			t.Logf("加载封禁IP列表失败: %v", err)
+		}
+
+		// 测试文件不存在的情况
+		if err := os.Remove(mgr.blockedIPsFile); err != nil {
+			t.Logf("删除文件失败: %v", err)
+		}
+		if err := mgr.LoadBlockedIPs(); err != nil {
+			t.Logf("加载封禁IP列表失败: %v", err)
 		}
 	})
 

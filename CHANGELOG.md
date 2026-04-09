@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.2](https://github.com/logdotar/sshwarden/compare/v1.0.1...v1.0.2) (2026-04-09)
+
+
+### Bug Fixes
+
+* 修复封禁过期的 IP 能够被及时自动解除封禁🍟🍟🍟 ([93d0c7b](https://github.com/logdotar/sshwarden/commit/93d0c7bcb8e548f67c45ab782d09e25b704bc5cd))
+
 ## [1.0.1](https://github.com/logdotar/sshwarden/compare/v1.0.0...v1.0.1) (2026-04-09)
 
 

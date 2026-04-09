@@ -1,0 +1,98 @@
+# SSH Guardian (sshwarden) Systemd Service Configuration
+# 用于监控 SSH 登录尝试并自动封禁恶意 IP 的守护服务
+# Author: logdotar
+
+[Unit]
+Description=sshwarden Service
+Documentation=https://github.com/logdotar/sshwarden.git
+# 在网络服务就绪后启动，确保网络可用性
+After=network.target network-online.target
+Wants=network-online.target
+# 重启限制：60秒内最多重启5次，防止无限重启循环
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+# 服务类型：简单服务（主进程即为服务进程）
+Type=simple
+# 运行身份：使用 root 用户（需要管理防火墙规则）
+User=root
+Group=root
+# 启动命令和工作目录
+ExecStart=/opt/sshwarden/sshwarden
+WorkingDirectory=/opt/sshwarden
+# 重启策略：仅在非正常退出时自动重启
+Restart=on-failure
+RestartSec=10s
+# 超时设置：启动和停止的超时时间各30秒
+TimeoutStartSec=30s
+TimeoutStopSec=30s
+
+# 日志输出：禁用标准输出和错误输出（程序有自己的日志系统）
+StandardOutput=null
+StandardError=null
+
+# 资源限制：最大打开文件描述符数量为 65536
+LimitNOFILE=65536
+
+# ===== 安全加固配置 =====
+
+# 文件系统保护：严格模式，整个文件系统只读（除 ReadWritePaths 指定目录外）
+ProtectSystem=strict
+# 禁止访问用户主目录
+ProtectHome=true
+# 为服务提供独立的临时目录（/tmp 和 /var/tmp）
+PrivateTmp=true
+# 允许写入的目录：仅允许在 /opt/sshwarden 下写日志和数据文件
+ReadWritePaths=/opt/sshwarden
+# 特权控制：允许获取新特权（需要管理 iptables/nftables 防火墙规则）
+NoNewPrivileges=false
+
+# 内核保护：防止修改内核参数
+ProtectKernelTunables=true
+# 防止修改 cgroup 层次结构
+ProtectControlGroups=true
+# 禁止加载/卸载内核模块
+ProtectKernelModules=true
+# 禁止访问内核日志（dmesg）
+ProtectKernelLogs=true
+# 保护系统时钟不被修改
+ProtectClock=true
+# 保护主机名不被修改
+ProtectHostname=true
+
+# 权限限制：禁止设置 SUID/SGID 位
+RestrictSUIDSGID=true
+# 禁止使用实时调度策略
+RestrictRealtime=true
+# 限制创建新的命名空间
+RestrictNamespaces=true
+# 锁定进程执行域，防止修改 exec domain
+LockPersonality=true
+# 防止内存页同时可写和可执行（防代码注入攻击）
+MemoryDenyWriteExecute=true
+
+# 网络限制：仅允许 IPv4、IPv6 和 Unix socket 通信
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# 系统调用过滤：只允许标准系统服务所需的系统调用
+SystemCallFilter=@system-service
+
+[Install]
+# 开机自启：在多用户图形模式下启用
+WantedBy=multi-user.target
+
+#配置说明
+#[Unit] 部分
+#启动顺序：在网络就绪后启动
+#重启限制：60秒内最多重启5次，防止无限重启循环
+#[Service] 部分
+#运行身份：root 用户（需要管理防火墙）
+#重启策略：失败时自动重启，间隔10秒
+#超时设置：启动/停止超时各30秒
+#文件描述符：最大打开文件数 65536
+#安全加固
+#文件系统保护：严格模式，仅允许写入 /opt/sshwarden
+#内核保护：防止修改内核参数、模块、时钟等
+#权限限制：禁止 SUID/SGID、限制命名空间、实时调度等
+#网络限制：仅允许 IPv4、IPv6 和 Unix socket
+#系统调用过滤：只允许标准服务所需的系统调用

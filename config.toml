@@ -1,0 +1,106 @@
+[ssh]
+# 此参数为日志文件路径，默认为/var/log/auth.log
+logpath = "auth.log"
+
+# 此参数为被封锁的IP文件，默认为blockedips.json，文件格式为json，如：{"192.168.1.1":{"bantime":1234567890,"findtime":1234567890,"failures":5}}
+blockedipsfile = "blockedips.json"
+# 正则表达式，注意转义特殊字符
+# 匹配各种 SSH 登录失败场景
+regex = [
+    # 通用认证失败
+    "authentication failure;.*rhost=(\\S+)",
+    # 密码认证失败
+    "Failed password for .* from (\\S+)",
+    # 无效用户
+    "Invalid user .* from (\\S+)",
+    # 密钥认证失败
+    "Failed publickey for .* from (\\S+)",
+    # 认证方法失败
+    "error: .* authentication method .* from (\\S+)",
+    # 会话超时
+    "Connection closed by (\\S+)\\s+port",
+    # 权限被拒绝
+    "Permission denied.*from (\\S+)",
+    # 主机密钥验证失败
+    "Host key verification failed.*from (\\S+)",
+    # 连接被重置
+    "Connection reset by (\\S+)\\s+port",
+    # 认证超时
+    "Authentication timeout from (\\S+)",
+]
+# 此参数为加白的网段、IP，可以是域名、网段或单个IP，逗号隔开。
+ignoreip = [
+    "203.192.7.225",
+    "192.168.177.0/24",
+    "223.88.90.0/24",
+    "192.168.1.0/24",
+    "47.97.158.195",
+    "47.96.186.179",
+]
+# 设置被封锁的时间间隔，如下表示10分钟，可以是秒(s)、分钟(m)、小时(h)、天(d)，不带单位则默认为s，-1表示永久封锁。
+bantime = "10m"
+# 检测的间隔时间，在间隔时间内，当>=maxtretry设置的失败次数，则触发限制，禁止访问。
+findtime = "10m"
+# 此参数为被封锁的IP最大失败次数，超过此次数，则封锁。
+maxfailures = 5
+
+# 永久封禁的 IP 列表，这些 IP 会被永久封禁，不受 bantime 影响
+# 支持单个 IP 地址和 CIDR 网段
+permanentblockip = [
+    "192.168.1.100",
+    "10.0.0.50",
+    "172.16.0.0/12",
+    "192.168.0.0/16"
+]
+
+[log]
+# 日志级别，默认为info 可以是 "debug", "info", "warn", "error", "dpanic", "panic", "fatal"
+level = "debug"
+# 日志文件名，默认为sshwarden.log
+filename = "sshwarden.log"
+# 日志文件大小，单位为MB，默认为100MB
+maxsize = 50
+# 最大过期日志保留的个数。
+maxbackups = 5
+# 日志文件保留天数，默认为7
+maxage = 7
+# 是否使用本地时间，默认为true
+localtime = true
+# 是否压缩日志，默认为true
+compress = true
+
+[firewall]
+# 设置使用防火墙类型，可选值: "iptables" 或 "firewall-cmd"
+type = "firewall-cmd"
+# 是否导出iptables规则，默认为true
+export_iptables_rules = true
+# 是否加载iptables规则，默认为true
+load_iptables_rules = true
+# 是否使用 ipset 来提高性能（仅对 iptables 有效）
+# 当需要封禁大量 IP 或网段时，建议启用此选项
+use_ipset = false
+# ipset 集合名称（仅对 iptables 有效）
+ipset_name = "ssh_guardian_blacklist"
+
+[ip]
+region_db_path = "ip2region_v4.xdb"
+
+[alert]
+[alert.email]
+# 是否启用邮件告警，默认为false
+enabled = false
+# SMTP服务器地址，例如：smtp.gmail.com
+smtp_host = "smtp.163.com"
+# SMTP服务器端口，例如：587
+smtp_port = "587"
+# SMTP用户名，通常是邮箱地址
+username = "user@example.com"
+# SMTP密码，部分邮箱需要使用应用专用密码
+password = "your_password"
+# 发件人邮箱地址
+from = "ssh2ban@example.com"
+# 收件人邮箱地址列表，多个邮箱用逗号分隔
+# 例如：["admin1@example.com", "admin2@example.com"]
+to = ["admin@example.com"]
+# 邮件主题
+subject = "sshwarden 告警"

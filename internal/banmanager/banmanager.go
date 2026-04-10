@@ -433,6 +433,11 @@ func (m *Manager) GetBlockedIPDetails() []BlockedIP {
 // 返回值:
 // - int: 清理的过期记录数量
 func (m *Manager) CleanupExpired() int {
+	// 先重新加载封禁记录，确保包含手动添加的记录
+	if err := m.LoadBlockedIPs(); err != nil {
+		m.logger.Debug("清理前重新加载封禁记录失败", zap.Error(err))
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -456,11 +461,9 @@ func (m *Manager) CleanupExpired() int {
 		}
 	}
 
-	if expiredCount > 0 {
-		// 保存更新后的封禁记录
-		if err := m.saveAllBlockedIPs(); err != nil {
-			m.logger.Error("保存更新后的封禁记录失败", zap.Error(err))
-		}
+	// 保存更新后的封禁记录（即使没有过期记录，也需要保存，因为 LoadBlockedIPs 可能已经过滤掉了过期记录）
+	if err := m.saveAllBlockedIPs(); err != nil {
+		m.logger.Error("保存更新后的封禁记录失败", zap.Error(err))
 	}
 
 	return expiredCount
@@ -500,8 +503,9 @@ func (m *Manager) LoadBlockedIPs() error {
 	now := time.Now()
 	updated := false
 	for _, blockedIP := range blockedIPs.IPs {
-		// 检查是否过期
-		if m.banTime != -1 && !blockedIP.Permanent && now.After(blockedIP.ExpiresAt) {
+		// 检查是否过期（即使 banTime == -1，也检查过期时间，以防配置已更改）
+		// 但永久封禁的 IP 不应该被清理
+		if !blockedIP.Permanent && now.After(blockedIP.ExpiresAt) {
 			m.logger.Debug("跳过已过期的封禁记录", zap.String("ip", blockedIP.IP))
 			continue
 		}

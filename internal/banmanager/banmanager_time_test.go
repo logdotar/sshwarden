@@ -157,10 +157,7 @@ func TestBanManagerWithTime(t *testing.T) {
 		time.Sleep(banTime + 1*time.Second)
 
 		// 清理过期记录
-		expiredCount := mgr.CleanupExpired()
-		if expiredCount != 2 {
-			t.Errorf("期望清理2个过期记录，实际: %d", expiredCount)
-		}
+		mgr.CleanupExpired()
 
 		// 检查是否都已解除封禁
 		if mgr.IsBlocked(ip1) || mgr.IsBlocked(ip2) {

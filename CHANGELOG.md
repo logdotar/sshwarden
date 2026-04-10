@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.5](https://github.com/logdotar/sshwarden/compare/v1.0.4...v1.0.5) (2026-04-10)
+
+
+### Bug Fixes
+
+* 修复手动添加的封禁 IP 到期后没有被自动清理🎉🎉🎉 ([eda21fa](https://github.com/logdotar/sshwarden/commit/eda21fa6a76ea5a09e2b82b498b8c49322a5a73c))
+* 修复没有清理过期IP记录的问题👓👓👓 ([e5a0bad](https://github.com/logdotar/sshwarden/commit/e5a0bad067580cbc91872f504314d46a8b647583))
+* 处理未处理的错误🍭🍭🍭 ([9214dff](https://github.com/logdotar/sshwarden/commit/9214dff26d22260e1ff0467a7142ecd84bc9860d))
+
 ## [1.0.4](https://github.com/logdotar/sshwarden/compare/v1.0.3...v1.0.4) (2026-04-10)
 
 

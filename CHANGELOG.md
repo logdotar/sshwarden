@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.0.4](https://github.com/logdotar/sshwarden/compare/v1.0.3...v1.0.4) (2026-04-10)
+
+
+### Bug Fixes
+
+* 优化release-please配置🍬🍬🍬 ([d2f0a83](https://github.com/logdotar/sshwarden/commit/d2f0a83a3ecb5ca908aa4e75d2e1c40c911a371c))
+
+
+### Code Refactoring
+
+* 优化了main中重复的代码，完善了README中服务部署部分💂💂💂 ([e843142](https://github.com/logdotar/sshwarden/commit/e843142555b6e35fb634f6dc63ed6edf611cf709))
+
+
+### Build System
+
+* 优化自动构建release-please配置，现在可以触发更多提交类型生成二进制文件👙👙👙 ([10852db](https://github.com/logdotar/sshwarden/commit/10852dba60f295b9c7f730ef96bb2342d09efefa))
+* 修改Release Please配置，修复配置文件的错误配置，优化配置🎏🎏🎏 ([6302b7c](https://github.com/logdotar/sshwarden/commit/6302b7c2060ed2684a9007f6a728fc27d6afa8e1))
+
 ## [1.0.3](https://github.com/logdotar/sshwarden/compare/v1.0.2...v1.0.3) (2026-04-10)
 
 

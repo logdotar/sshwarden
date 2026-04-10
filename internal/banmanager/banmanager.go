@@ -433,35 +433,67 @@ func (m *Manager) GetBlockedIPDetails() []BlockedIP {
 // 返回值:
 // - int: 清理的过期记录数量
 func (m *Manager) CleanupExpired() int {
-	// 先重新加载封禁记录，确保包含手动添加的记录
-	if err := m.LoadBlockedIPs(); err != nil {
-		m.logger.Debug("清理前重新加载封禁记录失败", zap.Error(err))
-	}
-
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	now := time.Now()
-	expiredCount := 0
+	var blockedIPs BlockedIPs
+	var err error
 
-	for ip, blockedIP := range m.ipBlocked {
-		// 检查是否过期（即使 banTime == -1，也检查过期时间，以防配置已更改）
-		// 但永久封禁的 IP 不应该被清理
-		if !blockedIP.Permanent && now.After(blockedIP.ExpiresAt) {
-			// 从防火墙中解除封禁
-			if m.firewall != nil {
-				if err := m.firewall.UnblockIP(ip); err != nil {
-					m.logger.Error("从防火墙解除封禁失败", zap.String("ip", ip), zap.Error(err))
-					// 继续处理，不中断清理过程
-				}
+	// 读取当前的封禁记录文件
+	data, err := os.ReadFile(m.blockedIPsFile)
+	if err != nil && !os.IsNotExist(err) {
+		m.logger.Debug("读取封禁记录文件失败", zap.Error(err))
+		// 继续处理，使用内存中的记录
+		blockedIPs.IPs = make([]BlockedIP, 0, len(m.ipBlocked))
+		for _, ip := range m.ipBlocked {
+			blockedIPs.IPs = append(blockedIPs.IPs, ip)
+		}
+	} else if err == nil {
+		// 解析封禁记录文件
+		if err := json.Unmarshal(data, &blockedIPs); err != nil {
+			m.logger.Debug("解析封禁记录文件失败", zap.Error(err))
+			// 继续处理，使用内存中的记录
+			blockedIPs.IPs = make([]BlockedIP, 0, len(m.ipBlocked))
+			for _, ip := range m.ipBlocked {
+				blockedIPs.IPs = append(blockedIPs.IPs, ip)
 			}
-
-			delete(m.ipBlocked, ip)
-			expiredCount++
+		}
+	} else {
+		// 文件不存在，使用内存中的记录
+		blockedIPs.IPs = make([]BlockedIP, 0, len(m.ipBlocked))
+		for _, ip := range m.ipBlocked {
+			blockedIPs.IPs = append(blockedIPs.IPs, ip)
 		}
 	}
 
-	// 保存更新后的封禁记录（即使没有过期记录，也需要保存，因为 LoadBlockedIPs 可能已经过滤掉了过期记录）
+	now := time.Now()
+	expiredCount := 0
+	var validIPs []BlockedIP
+
+	// 检查每条记录是否过期
+	for _, blockedIP := range blockedIPs.IPs {
+		if !blockedIP.Permanent && now.After(blockedIP.ExpiresAt) {
+			// 从防火墙中解除封禁
+			if m.firewall != nil {
+				if err := m.firewall.UnblockIP(blockedIP.IP); err != nil {
+					m.logger.Error("从防火墙解除封禁失败", zap.String("ip", blockedIP.IP), zap.Error(err))
+					// 继续处理，不中断清理过程
+				}
+			}
+			expiredCount++
+		} else {
+			// 保留未过期的记录
+			validIPs = append(validIPs, blockedIP)
+		}
+	}
+
+	// 更新内存中的封禁记录
+	m.ipBlocked = make(map[string]BlockedIP)
+	for _, blockedIP := range validIPs {
+		m.ipBlocked[blockedIP.IP] = blockedIP
+	}
+
+	// 保存更新后的封禁记录
 	if err := m.saveAllBlockedIPs(); err != nil {
 		m.logger.Error("保存更新后的封禁记录失败", zap.Error(err))
 	}

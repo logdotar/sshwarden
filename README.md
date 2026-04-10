@@ -220,31 +220,38 @@ sshwarden 提供了以下命令行命令：
 
 #### Systemd 服务
 
-1. 创建服务文件：
+1. **使用内置命令安装**（推荐）：
 
 ```bash
-sudo nano /etc/systemd/system/sshwarden.service
+sudo ./sshwarden install
 ```
 
-2. 写入以下内容：
+2. **手动创建服务文件**：
+
+```bash
+sudo vim /etc/systemd/system/sshwarden.service
+```
+
+3. 写入以下内容（替换 `/path/to/sshwarden` 为实际路径）：
 
 ```ini
 [Unit]
-Description=sshwarden Service
-After=network.target
+Description = sshwarden Service
+After = network.target
 
 [Service]
-ExecStart=/path/to/sshwarden
-WorkingDirectory=/path/to/sshwarden
-Restart=always
-RestartSec=10
-User=root
+ExecStart = /path/to/sshwarden
+WorkingDirectory = /path/to/sshwarden
+Restart = always
+RestartSec = 10
+User = root
+Group = root
 
 [Install]
-WantedBy=multi-user.target
+WantedBy = multi-user.target
 ```
 
-3. 启动服务：
+4. 启动服务：
 
 ```bash
 sudo systemctl daemon-reload
@@ -252,11 +259,74 @@ sudo systemctl enable sshwarden
 sudo systemctl start sshwarden
 ```
 
+5. 查看服务状态：
+
+```bash
+sudo systemctl status sshwarden
+```
+
+#### init.d 服务（适用于较旧的系统）
+
+1. 创建服务脚本：
+
+```bash
+sudo vim /etc/init.d/sshwarden
+```
+
+2. 写入以下内容（替换 `/path/to/sshwarden` 为实际路径）：
+
+```bash
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          sshwarden
+# Required-Start:    $network
+# Required-Stop:     $network
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: sshwarden service
+# Description:       SSH login failure detection and IP blocking tool
+### END INIT INFO
+
+DAEMON=/path/to/sshwarden
+DAEMON_ARGS=""
+DAEMON_USER=root
+
+case "$1" in
+  start)
+    echo "Starting sshwarden..."
+    start-stop-daemon --start --background --chuid $DAEMON_USER --exec $DAEMON -- $DAEMON_ARGS
+    ;;
+  stop)
+    echo "Stopping sshwarden..."
+    start-stop-daemon --stop --exec $DAEMON
+    ;;
+  restart)
+    $0 stop
+    sleep 1
+    $0 start
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart}"
+    exit 1
+    ;;
+esac
+
+exit 0
+```
+
+3. 设置执行权限并启动服务：
+
+```bash
+sudo chmod +x /etc/init.d/sshwarden
+sudo update-rc.d sshwarden defaults
+sudo /etc/init.d/sshwarden start
+```
+
 ### 容器化部署
 
 #### Docker 部署
 
-创建 `Dockerfile`：
+1. **创建 Dockerfile**：
 
 ```dockerfile
 FROM golang:1.25 AS builder
@@ -275,19 +345,93 @@ RUN apt-get update && apt-get install -y iptables
 CMD ["./sshwarden"]
 ```
 
+2. **构建镜像**：
+
+```bash
+docker build -t sshwarden .
+```
+
+3. **运行容器**（注意：需要特权模式来操作防火墙）：
+
+```bash
+docker run --name sshwarden --privileged -v /var/log:/var/log -v ./config.toml:/app/config.toml -d sshwarden
+```
+
+#### Docker Compose 部署
+
+创建 `docker-compose.yml` 文件：
+
+```yaml
+version: '3'
+services:
+  sshwarden:
+    build: .
+    container_name: sshwarden
+    privileged: true
+    volumes:
+      - /var/log:/var/log
+      - ./config.toml:/app/config.toml
+      - ./blockedips.json:/app/blockedips.json
+    restart: always
+```
+
+启动服务：
+
+```bash
+docker-compose up -d
+```
+### 升级指南
+
+1. **备份配置和数据**：
+
+```bash
+cp /path/to/config.toml /path/to/config.toml.bak
+cp /path/to/blockedips.json /path/to/blockedips.json.bak
+```
+
+2. **停止服务**：
+
+```bash
+sudo systemctl stop sshwarden
+```
+
+3. **替换二进制文件**：
+
+```bash
+# 使用编译的新版本
+cp /path/to/new/sshwarden /path/to/sshwarden
+
+# 或使用 GitHub 发布的预构建版本
+tar -xzf sshwarden_*.tar.gz
+cp sshwarden /path/to/sshwarden
+```
+
+4. **启动服务**：
+
+```bash
+sudo systemctl start sshwarden
+```
+
+5. **验证升级**：
+
+```bash
+sudo systemctl status sshwarden
+./sshwarden --version
+```
+
 ### GitHub 自动构建
 
 sshwarden 配置了完整的 GitHub Actions CI/CD 流程：
 
 - **构建和测试**：当代码推送到 main/master 分支或创建 pull request 时，会在 Ubuntu 24.04 平台上执行：
-  - Golangci-lint 代码质量检查
-  - 应用构建
-  - 带竞争检测（race）的单元测试
+    - Golangci-lint 代码质量检查
+    - 应用构建
+    - 带竞争检测（race）的单元测试
 
 - **自动版本管理**：使用 Google Release Please 自动分析提交历史，生成版本号、CHANGELOG 并创建发布 PR
 
 - **多平台构建**：当发布 PR 合并后，使用 GoReleaser 自动构建以下平台的二进制文件：
-  - Linux (amd64)
+    - Linux (amd64)
 
 - **自动发布**：构建完成后自动创建 GitHub Release，包含所有平台的预构建二进制文件
 

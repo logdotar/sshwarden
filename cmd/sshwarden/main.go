@@ -75,6 +75,30 @@ type App struct {
 	emailAlert    *alert.EmailAlert
 }
 
+// parseTimeSettings 解析时间设置
+//
+// 参数:
+// - app: 应用实例
+//
+// 返回值:
+// - time.Duration: findTime 设置
+// - time.Duration: banTime 设置
+func (a *App) parseTimeSettings() (time.Duration, time.Duration) {
+	findTime, err := a.cfg.SSH.ParseFindTime()
+	if err != nil {
+		a.logger.Warn("解析 findtime 失败，使用默认值 10 分钟", zap.Error(err))
+		findTime = 10 * time.Minute
+	}
+
+	banTime, err := a.cfg.SSH.ParseBanTime()
+	if err != nil {
+		a.logger.Warn("解析 bantime 失败，使用默认值 10 分钟", zap.Error(err))
+		banTime = 10 * time.Minute
+	}
+
+	return findTime, banTime
+}
+
 // NewApp 创建并初始化 sshwarden 应用实例
 //
 // 返回值:
@@ -114,17 +138,7 @@ func NewApp() (*App, error) {
 		app.logger.Warn("IP归属地查询模块初始化失败，将继续运行", zap.Error(err))
 	}
 
-	findTime, err := app.cfg.SSH.ParseFindTime()
-	if err != nil {
-		app.logger.Warn("解析 findtime 失败，使用默认值 10 分钟", zap.Error(err))
-		findTime = 10 * time.Minute
-	}
-
-	banTime, err := app.cfg.SSH.ParseBanTime()
-	if err != nil {
-		app.logger.Warn("解析 bantime 失败，使用默认值 10 分钟", zap.Error(err))
-		banTime = 10 * time.Minute
-	}
+	findTime, banTime := app.parseTimeSettings()
 
 	app.banMgr = banmanager.NewManager(app.cfg.SSH.BlockedIPsFile, findTime, banTime, app.firewallMgr, app.logger)
 	if err := app.banMgr.LoadRegexPatterns(app.cfg.SSH.RegexPatterns); err != nil {
@@ -170,17 +184,7 @@ func (a *App) onConfigChange() {
 	}
 
 	// 重新解析 findtime 和 bantime
-	findTime, err := a.cfg.SSH.ParseFindTime()
-	if err != nil {
-		a.logger.Warn("解析 findtime 失败，使用默认值 10 分钟", zap.Error(err))
-		findTime = 10 * time.Minute
-	}
-
-	banTime, err := a.cfg.SSH.ParseBanTime()
-	if err != nil {
-		a.logger.Warn("解析 bantime 失败，使用默认值 10 分钟", zap.Error(err))
-		banTime = 10 * time.Minute
-	}
+	findTime, banTime := a.parseTimeSettings()
 
 	// 更新 banmanager 中的 findtime 和 bantime
 	a.banMgr.UpdateTimeSettings(findTime, banTime)
@@ -367,9 +371,10 @@ func (a *App) Close() {
 // 它创建应用实例，设置信号处理，并启动应用的主运行循环
 func main() {
 	rootCmd := &cobra.Command{
-		Use:   "sshwarden",
-		Short: "SSH 登录失败检测和 IP 封禁工具",
-		Long:  `sshwarden 是一个轻量级的 SSH 登录失败检测和 IP 封禁工具，使用 Go 语言编写。`,
+		Use:     "sshwarden",
+		Short:   "SSH 登录失败检测和 IP 封禁工具",
+		Long:    `sshwarden 是一个轻量级的 SSH 登录失败检测和 IP 封禁工具，使用 Go 语言编写。`,
+		Version: version,
 		Run: func(cmd *cobra.Command, args []string) {
 			app, err := NewApp()
 			if err != nil {
@@ -387,6 +392,9 @@ func main() {
 			}
 		},
 	}
+
+	// 设置版本输出格式
+	rootCmd.SetVersionTemplate("sshwarden version: {{.Version}}\n")
 
 	installCmd := &cobra.Command{
 		Use:   "install",
@@ -472,7 +480,15 @@ func main() {
 		},
 	}
 
-	rootCmd.AddCommand(installCmd, uninstallCmd, blockCmd, unblockCmd)
+	versionCmd := &cobra.Command{
+		Use:   "version",
+		Short: "显示版本信息",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Printf("sshwarden version: %s\n", version)
+		},
+	}
+
+	rootCmd.AddCommand(installCmd, uninstallCmd, blockCmd, unblockCmd, versionCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Printf("执行命令失败: %v\n", err)

@@ -210,6 +210,43 @@ func (m *Manager) ClearFailure(ip string) {
 	delete(m.ipFailures, ip)
 }
 
+// isBlockedHelper 检查 IP 是否已被封禁的辅助函数
+//
+// 参数:
+// - ip: IP 地址
+// - blocked: 封禁信息
+// - exists: 是否存在
+//
+// 返回值:
+// - bool: 是否已被封禁
+func (m *Manager) isBlockedHelper(ip string, blocked BlockedIP, exists bool) bool {
+	if !exists {
+		return false
+	}
+
+	// 检查是否为永久封禁
+	if blocked.Permanent {
+		// 对于永久封禁，验证文件中的记录是否仍然存在
+		if err := m.LoadBlockedIPs(); err != nil {
+			m.logger.Debug("重新加载封禁记录失败", zap.Error(err))
+		}
+
+		// 重新检查 IP 是否在封禁记录中
+		m.mu.RLock()
+		blocked, exists = m.ipBlocked[ip]
+		m.mu.RUnlock()
+
+		return exists && blocked.Permanent
+	}
+
+	// 检查封禁是否过期
+	if time.Now().After(blocked.ExpiresAt) {
+		return false
+	}
+
+	return true
+}
+
 // IsBlocked 检查 IP 是否已被封禁
 //
 // 参数:
@@ -225,28 +262,6 @@ func (m *Manager) IsBlocked(ip string) bool {
 
 	// 检查封禁是否过期
 	if exists {
-		// 检查是否为永久封禁
-		if blocked.Permanent {
-			// 对于永久封禁，验证文件中的记录是否仍然存在
-			if err := m.LoadBlockedIPs(); err != nil {
-				m.logger.Debug("重新加载封禁记录失败", zap.Error(err))
-			}
-
-			// 重新检查 IP 是否在封禁记录中
-			m.mu.RLock()
-			blocked, exists = m.ipBlocked[ip]
-			m.mu.RUnlock()
-
-			return exists && blocked.Permanent
-		}
-
-		// 检查封禁是否过期
-		if time.Now().After(blocked.ExpiresAt) {
-			// 封禁已过期，自动解除封禁
-			m.unblockExpiredIP(ip)
-			return false
-		}
-
 		// 对于临时封禁，验证文件中的记录是否仍然存在
 		if err := m.LoadBlockedIPs(); err != nil {
 			m.logger.Debug("重新加载封禁记录失败", zap.Error(err))
@@ -257,18 +272,7 @@ func (m *Manager) IsBlocked(ip string) bool {
 		blocked, exists = m.ipBlocked[ip]
 		m.mu.RUnlock()
 
-		if !exists {
-			return false
-		}
-
-		// 再次检查封禁是否过期
-		if time.Now().After(blocked.ExpiresAt) {
-			// 封禁已过期，自动解除封禁
-			m.unblockExpiredIP(ip)
-			return false
-		}
-
-		return true
+		return m.isBlockedHelper(ip, blocked, exists)
 	}
 
 	// IP 不在内存的封禁记录中，尝试重新加载封禁记录
@@ -282,23 +286,72 @@ func (m *Manager) IsBlocked(ip string) bool {
 	blocked, exists = m.ipBlocked[ip]
 	m.mu.RUnlock()
 
-	if !exists {
-		return false
+	return m.isBlockedHelper(ip, blocked, exists)
+}
+
+// validateIP 验证 IP 地址或 CIDR 网段格式
+//
+// 参数:
+// - ip: IP 地址或 CIDR 网段
+//
+// 返回值:
+// - error: 验证过程中的错误
+func (m *Manager) validateIP(ip string) error {
+	// 验证 IP 地址格式（支持单个 IP 和 CIDR 网段）
+	if net.ParseIP(ip) == nil {
+		// 尝试解析为 CIDR 网段
+		_, _, err := net.ParseCIDR(ip)
+		if err != nil {
+			return fmt.Errorf("无效的 IP 地址或 CIDR 网段: %s", ip)
+		}
+	}
+	return nil
+}
+
+// blockIPHelper 处理 IP 封禁的辅助方法
+//
+// 参数:
+// - ip: IP 地址
+// - blockedIP: 封禁信息
+// - logMsg: 日志消息
+//
+// 返回值:
+// - error: 处理过程中的错误
+func (m *Manager) blockIPHelper(ip string, blockedIP BlockedIP, logMsg string) error {
+	// 从防火墙中封禁 IP
+	if m.firewall != nil {
+		if err := m.firewall.BlockIP(ip); err != nil {
+			m.logger.Error("封禁 IP 失败", zap.String("ip", ip), zap.Error(err))
+			// 继续处理，不中断封禁过程
+		}
 	}
 
-	// 检查是否为永久封禁
-	if blocked.Permanent {
-		return true
+	if err := m.saveBlockedIP(blockedIP); err != nil {
+		m.logger.Error("保存封禁 IP 记录失败", zap.String("ip", ip), zap.Error(err))
+		return err
 	}
 
-	// 检查封禁是否过期
-	if time.Now().After(blocked.ExpiresAt) {
-		// 封禁已过期，自动解除封禁
-		m.unblockExpiredIP(ip)
-		return false
-	}
+	m.logger.Info(logMsg, zap.String("ip", ip))
+	return nil
+}
 
-	return true
+// createPermanentBlockedIP 创建永久封禁记录
+//
+// 参数:
+// - ip: IP 地址
+//
+// 返回值:
+// - BlockedIP: 永久封禁记录
+func (m *Manager) createPermanentBlockedIP(ip string) BlockedIP {
+	now := time.Now()
+	expiresAt := time.Date(9999, 12, 31, 23, 59, 59, 999999999, time.UTC)
+
+	return BlockedIP{
+		IP:        ip,
+		BannedAt:  now,
+		ExpiresAt: expiresAt,
+		Permanent: true,
+	}
 }
 
 // BlockIP 封禁 IP 或 CIDR 网段
@@ -309,13 +362,9 @@ func (m *Manager) IsBlocked(ip string) bool {
 // 返回值:
 // - error: 封禁过程中的错误
 func (m *Manager) BlockIP(ip string) error {
-	// 验证 IP 地址格式（支持单个 IP 和 CIDR 网段）
-	if net.ParseIP(ip) == nil {
-		// 尝试解析为 CIDR 网段
-		_, _, err := net.ParseCIDR(ip)
-		if err != nil {
-			return fmt.Errorf("无效的 IP 地址或 CIDR 网段: %s", ip)
-		}
+	// 验证 IP 地址格式
+	if err := m.validateIP(ip); err != nil {
+		return err
 	}
 
 	m.mu.Lock()
@@ -393,7 +442,7 @@ func (m *Manager) CleanupExpired() int {
 	for ip, blockedIP := range m.ipBlocked {
 		// 检查是否过期（即使 banTime == -1，也检查过期时间，以防配置已更改）
 		// 但永久封禁的 IP 不应该被清理
-		if !blockedIP.Permanent && m.banTime != -1 && now.After(blockedIP.ExpiresAt) {
+		if !blockedIP.Permanent && now.After(blockedIP.ExpiresAt) {
 			// 从防火墙中解除封禁
 			if m.firewall != nil {
 				if err := m.firewall.UnblockIP(ip); err != nil {
@@ -490,13 +539,9 @@ func (m *Manager) LoadPermanentBlockIPs(permanentBlockIPs []string, whitelist Wh
 
 	for _, ip := range permanentBlockIPs {
 		// 验证 IP 地址格式（支持单个 IP 和 CIDR 网段）
-		if net.ParseIP(ip) == nil {
-			// 尝试解析为 CIDR 网段
-			_, _, err := net.ParseCIDR(ip)
-			if err != nil {
-				m.logger.Warn("无效的 IP 地址或 CIDR 网段，跳过永久封禁", zap.String("ip", ip))
-				continue
-			}
+		if err := m.validateIP(ip); err != nil {
+			m.logger.Warn("无效的 IP 地址或 CIDR 网段，跳过永久封禁", zap.String("ip", ip))
+			continue
 		}
 
 		// 检查 IP 是否在白名单中
@@ -514,46 +559,14 @@ func (m *Manager) LoadPermanentBlockIPs(permanentBlockIPs []string, whitelist Wh
 				blockedIP.Permanent = true
 				blockedIP.ExpiresAt = time.Date(9999, 12, 31, 23, 59, 59, 999999999, time.UTC)
 				m.ipBlocked[ip] = blockedIP
-				// 从防火墙中封禁 IP
-				if m.firewall != nil {
-					if err := m.firewall.BlockIP(ip); err != nil {
-						m.logger.Error("封禁 IP 失败", zap.String("ip", ip), zap.Error(err))
-						// 继续处理，不中断封禁过程
-					}
-				}
-				if err := m.saveBlockedIP(blockedIP); err != nil {
-					m.logger.Error("保存封禁 IP 记录失败", zap.String("ip", ip), zap.Error(err))
-				}
-				m.logger.Info("已将 IP 更新为永久封禁", zap.String("ip", ip))
+				_ = m.blockIPHelper(ip, blockedIP, "已将 IP 更新为永久封禁")
 			}
 		} else {
 			// 如果未被封禁，直接永久封禁
-			now := time.Now()
-			expiresAt := time.Date(9999, 12, 31, 23, 59, 59, 999999999, time.UTC)
-
-			blockedIP := BlockedIP{
-				IP:        ip,
-				BannedAt:  now,
-				ExpiresAt: expiresAt,
-				Permanent: true,
-			}
-
+			blockedIP := m.createPermanentBlockedIP(ip)
 			m.ipBlocked[ip] = blockedIP
 			delete(m.ipFailures, ip)
-
-			// 从防火墙中封禁 IP
-			if m.firewall != nil {
-				if err := m.firewall.BlockIP(ip); err != nil {
-					m.logger.Error("封禁 IP 失败", zap.String("ip", ip), zap.Error(err))
-					// 继续处理，不中断封禁过程
-				}
-			}
-
-			if err := m.saveBlockedIP(blockedIP); err != nil {
-				m.logger.Error("保存封禁 IP 记录失败", zap.String("ip", ip), zap.Error(err))
-			}
-
-			m.logger.Info("已永久封禁 IP", zap.String("ip", ip))
+			_ = m.blockIPHelper(ip, blockedIP, "已永久封禁 IP")
 		}
 	}
 }
@@ -632,38 +645,6 @@ func (m *Manager) saveAllBlockedIPs() error {
 	return nil
 }
 
-// unblockExpiredIP 解除过期的 IP 封禁（内部方法，不验证 IP 格式）
-//
-// 参数:
-// - ip: IP 地址或 CIDR 网段
-func (m *Manager) unblockExpiredIP(ip string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// 检查 IP 是否仍在封禁记录中
-	if _, exists := m.ipBlocked[ip]; !exists {
-		return
-	}
-
-	// 从防火墙中解除封禁
-	if m.firewall != nil {
-		if err := m.firewall.UnblockIP(ip); err != nil {
-			m.logger.Error("从防火墙解除过期封禁失败", zap.String("ip", ip), zap.Error(err))
-			// 继续处理，不中断解除封禁过程
-		}
-	}
-
-	// 从封禁记录中删除
-	delete(m.ipBlocked, ip)
-
-	// 保存更新后的封禁记录
-	if err := m.saveAllBlockedIPs(); err != nil {
-		m.logger.Error("保存更新后的封禁记录失败", zap.Error(err))
-	}
-
-	m.logger.Info("已自动解除过期 IP 封禁", zap.String("ip", ip))
-}
-
 // UnblockIP 主动解除 IP 封禁
 //
 // 参数:
@@ -672,13 +653,9 @@ func (m *Manager) unblockExpiredIP(ip string) {
 // 返回值:
 // - error: 解除封禁过程中的错误
 func (m *Manager) UnblockIP(ip string) error {
-	// 验证 IP 地址格式（支持单个 IP 和 CIDR 网段）
-	if net.ParseIP(ip) == nil {
-		// 尝试解析为 CIDR 网段
-		_, _, err := net.ParseCIDR(ip)
-		if err != nil {
-			return fmt.Errorf("无效的 IP 地址或 CIDR 网段: %s", ip)
-		}
+	// 验证 IP 地址格式
+	if err := m.validateIP(ip); err != nil {
+		return err
 	}
 
 	m.mu.Lock()
@@ -719,13 +696,9 @@ func (m *Manager) UnblockIP(ip string) error {
 // 返回值:
 // - error: 封禁过程中的错误
 func (m *Manager) BlockIPPermanently(ip string, whitelist WhitelistManager) error {
-	// 验证 IP 地址格式（支持单个 IP 和 CIDR 网段）
-	if net.ParseIP(ip) == nil {
-		// 尝试解析为 CIDR 网段
-		_, _, err := net.ParseCIDR(ip)
-		if err != nil {
-			return fmt.Errorf("无效的 IP 地址或 CIDR 网段: %s", ip)
-		}
+	// 验证 IP 地址格式
+	if err := m.validateIP(ip); err != nil {
+		return err
 	}
 
 	// 检查 IP 是否在白名单中
@@ -736,34 +709,14 @@ func (m *Manager) BlockIPPermanently(ip string, whitelist WhitelistManager) erro
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	now := time.Now()
-	// 永久封禁，设置过期时间为 9999 年
-	expiresAt := time.Date(9999, 12, 31, 23, 59, 59, 999999999, time.UTC)
-
-	blockedIP := BlockedIP{
-		IP:        ip,
-		BannedAt:  now,
-		ExpiresAt: expiresAt,
-		Permanent: true, // 标记为永久封禁
-	}
-
+	blockedIP := m.createPermanentBlockedIP(ip)
 	m.ipBlocked[ip] = blockedIP
 	delete(m.ipFailures, ip)
 
-	// 从防火墙中封禁 IP
-	if m.firewall != nil {
-		if err := m.firewall.BlockIP(ip); err != nil {
-			m.logger.Error("封禁 IP 失败", zap.String("ip", ip), zap.Error(err))
-			// 继续处理，不中断封禁过程
-		}
-	}
-
-	if err := m.saveBlockedIP(blockedIP); err != nil {
-		m.logger.Error("保存封禁 IP 记录失败", zap.String("ip", ip), zap.Error(err))
+	if err := m.blockIPHelper(ip, blockedIP, "已永久封禁 IP"); err != nil {
 		return err
 	}
 
-	m.logger.Info("已永久封禁 IP", zap.String("ip", ip))
 	return nil
 }
 
@@ -810,7 +763,7 @@ func (m *Manager) UpdateTimeSettings(findTime, banTime time.Duration) {
 				m.logger.Error("保存更新后的封禁记录失败", zap.Error(err))
 			}
 		}
-	} else if oldBanTime != -1 && banTime != -1 && oldBanTime != banTime {
+	} else if oldBanTime != banTime {
 		// 当 banTime 从一个非 -1 值变为另一个非 -1 值时，更新所有非永久封禁 IP 的过期时间
 		now := time.Now()
 		updated := false

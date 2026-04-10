@@ -252,7 +252,7 @@ func (a *App) Run(ctx context.Context) error {
 	go a.processLogLines(ctx, t, errCh)
 
 	// 定期清理过期的封禁记录
-	cleanupTicker := time.NewTicker(5 * time.Minute)
+	cleanupTicker := time.NewTicker(30 * time.Second)
 	defer cleanupTicker.Stop()
 
 	for {

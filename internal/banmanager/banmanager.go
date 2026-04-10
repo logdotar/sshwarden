@@ -256,14 +256,11 @@ func (m *Manager) isBlockedHelper(ip string, blocked BlockedIP, exists bool) boo
 // - bool: 是否已被封禁
 func (m *Manager) IsBlocked(ip string) bool {
 	// 先检查 IP 是否在内存的封禁记录中
-	var blocked BlockedIP
-	var exists bool
-
 	m.mu.RLock()
-	blocked, exists = m.ipBlocked[ip]
+	_, exists := m.ipBlocked[ip]
 	m.mu.RUnlock()
 
-	// 检查封禁是否过期
+	// 如果 IP 在内存中
 	if exists {
 		// 对于临时封禁，验证文件中的记录是否仍然存在
 		if err := m.LoadBlockedIPs(); err != nil {
@@ -272,7 +269,7 @@ func (m *Manager) IsBlocked(ip string) bool {
 
 		// 重新检查 IP 是否在封禁记录中
 		m.mu.RLock()
-		blocked, exists = m.ipBlocked[ip]
+		blocked, exists := m.ipBlocked[ip]
 		m.mu.RUnlock()
 
 		return m.isBlockedHelper(ip, blocked, exists)
@@ -286,7 +283,7 @@ func (m *Manager) IsBlocked(ip string) bool {
 
 	// 再次检查 IP 是否在封禁记录中
 	m.mu.RLock()
-	blocked, exists = m.ipBlocked[ip]
+	blocked, exists := m.ipBlocked[ip]
 	m.mu.RUnlock()
 
 	return m.isBlockedHelper(ip, blocked, exists)

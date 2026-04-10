@@ -16,13 +16,17 @@ func TestCleanupExpired_ManualBlock(t *testing.T) {
 	tempFile, err := os.CreateTemp("", "blockedips")
 	assert.NoError(t, err)
 	tempFileName := tempFile.Name()
-	defer os.Remove(tempFileName)
-	tempFile.Close()
+	defer func() {
+		_ = os.Remove(tempFileName)
+	}()
+	_ = tempFile.Close()
 
 	// 创建日志器
 	logger, err := zap.NewDevelopment()
 	assert.NoError(t, err)
-	defer logger.Sync()
+	defer func() {
+		_ = logger.Sync()
+	}()
 
 	// 创建 banmanager
 	m := NewManager(tempFileName, 10*time.Minute, 1*time.Second, nil, logger)

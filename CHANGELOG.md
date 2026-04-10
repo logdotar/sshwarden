@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.3](https://github.com/logdotar/sshwarden/compare/v1.0.2...v1.0.3) (2026-04-10)
+
+
+### Bug Fixes
+
+* 修复 golangci-lint 发现的无效变量赋值问题 ([8a017a7](https://github.com/logdotar/sshwarden/commit/8a017a73d89e82d5c96162536cd3231a593d210b))
+* 解决了 golangci-lint 发现的无效变量赋值问题 ([5e8239b](https://github.com/logdotar/sshwarden/commit/5e8239be966bb4c0a91f178b2bb075207ec97e28))
+
 ## [1.0.2](https://github.com/logdotar/sshwarden/compare/v1.0.1...v1.0.2) (2026-04-09)
 
 

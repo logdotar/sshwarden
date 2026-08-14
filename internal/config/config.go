@@ -221,7 +221,7 @@ func (m *Manager) setDefaults() {
 		m.config.Firewall.Type = FirewallTypeIptables
 	}
 	if m.config.Firewall.IPSetName == "" {
-		m.config.Firewall.IPSetName = "ssh_guardian_blacklist"
+		m.config.Firewall.IPSetName = "ssh_warden_blacklist"
 	}
 	if m.config.Log.Level == "" {
 		m.config.Log.Level = "info"

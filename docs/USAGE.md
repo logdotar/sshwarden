@@ -43,7 +43,7 @@ maxfailures = 5
 type = "iptables"  # 或 "firewall-cmd"
 # 是否使用 ipset 来提高性能（仅对 iptables 有效）
 # use_ipset = true
-# ipset_name = "ssh_guardian_blacklist"
+# ipset_name = "ssh_warden_blacklist"
 ```
 
 ### 4. 运行
@@ -259,7 +259,7 @@ tail -f sshwarden.log
    [firewall]
    type = "iptables"
    use_ipset = true
-   ipset_name = "ssh_guardian_blacklist"
+   ipset_name = "ssh_warden_blacklist"
    ```
 
 2. **ipset 优势**：

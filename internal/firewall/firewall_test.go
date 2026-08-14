@@ -1,8 +1,9 @@
 package firewall
 
 import (
-	"github.com/logdotar/sshwarden/internal/config"
 	"testing"
+
+	"github.com/logdotar/sshwarden/internal/config"
 
 	"go.uber.org/zap"
 )
@@ -70,7 +71,7 @@ func TestFirewallManager(t *testing.T) {
 		cfg := &config.FirewallConfig{
 			Type:      "iptables",
 			UseIPSet:  true,
-			IPSetName: "test_ssh_guardian",
+			IPSetName: "test_ssh_warden",
 		}
 		mgr, err := NewManager(cfg, logger)
 		if err != nil {

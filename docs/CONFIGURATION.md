@@ -45,7 +45,7 @@ sshwarden 使用 TOML 格式的配置文件，默认名为 `config.toml`。
 | `export_iptables_rules` | bool | true | 是否导出 iptables 规则到文件 |
 | `load_iptables_rules` | bool | true | 是否在启动时加载 iptables 规则 |
 | `use_ipset` | bool | false | 是否使用 ipset 来提高性能（仅对 iptables 有效） |
-| `ipset_name` | string | "ssh_guardian_blacklist" | ipset 集合名称（仅对 iptables 有效） |
+| `ipset_name` | string | "ssh_warden_blacklist" | ipset 集合名称（仅对 iptables 有效） |
 
 **无防火墙支持模式**:
 - 当系统不支持配置的防火墙类型时，应用会自动切换到无防火墙支持模式

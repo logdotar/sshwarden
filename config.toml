@@ -80,7 +80,7 @@ load_iptables_rules = true
 # 当需要封禁大量 IP 或网段时，建议启用此选项
 use_ipset = false
 # ipset 集合名称（仅对 iptables 有效）
-ipset_name = "ssh_guardian_blacklist"
+ipset_name = "ssh_warden_blacklist"
 
 [ip]
 region_db_path = "ip2region_v4.xdb"

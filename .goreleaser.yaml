@@ -49,6 +49,16 @@ archives:
       - goos: windows
         formats: [zip]
 
+    files:
+      - license*
+      - LICENSE*
+      - readme*
+      - README*
+      - changelog*
+      - CHANGELOG*
+      - config.toml
+      - ip2region_v4.xdb
+
 # changelog 配置已经合理，排除一些无关 commit 前缀
 changelog:
   sort: asc

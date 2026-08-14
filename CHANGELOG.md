@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.6](https://github.com/logdotar/sshwarden/compare/v1.0.5...v1.0.6) (2026-08-14)
+
+
+### Bug Fixes
+
+* 修改遗留的命名🐜🐜🐜 ([e3f8150](https://github.com/logdotar/sshwarden/commit/e3f81500d641bd0530356ba8bf0345460b33f9ea))
+
 ## [1.0.5](https://github.com/logdotar/sshwarden/compare/v1.0.4...v1.0.5) (2026-04-10)
 
 

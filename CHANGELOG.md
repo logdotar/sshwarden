@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.7](https://github.com/logdotar/sshwarden/compare/v1.0.6...v1.0.7) (2026-08-14)
+
+
+### Build System
+
+* 构建产物中包含ip库文件和配置文件 ([17c307f](https://github.com/logdotar/sshwarden/commit/17c307ff0227e71e8bb6947c67ee019cd8c47551))
+
 ## [1.0.6](https://github.com/logdotar/sshwarden/compare/v1.0.5...v1.0.6) (2026-08-14)
 
 

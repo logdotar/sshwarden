@@ -37,6 +37,7 @@ func Install() error {
 [Unit]
 Description=sshwarden Service
 Documentation=https://github.com/logdotar/sshwarden.git
+ConditionFileIsExecutable=%s
 After=network.target network-online.target
 Wants=network-online.target
 StartLimitIntervalSec=60
@@ -80,7 +81,7 @@ SystemCallFilter=@system-service
 
 [Install]
 WantedBy=multi-user.target
-`, execPath, workDir, workDir)
+`, execPath, execPath, workDir, workDir)
 
 	// 写入服务文件
 	servicePath := "/etc/systemd/system/sshwarden.service"

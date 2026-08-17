@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.8](https://github.com/logdotar/sshwarden/compare/v1.0.7...v1.0.8) (2026-08-17)
+
+
+### Performance Improvements
+
+* 优化服务配置添加ConditionFileIsExecutable选项🎉🎉🎉 ([3bc5255](https://github.com/logdotar/sshwarden/commit/3bc52558ab964df513606721f43cb27826219668))
+
 ## [1.0.7](https://github.com/logdotar/sshwarden/compare/v1.0.6...v1.0.7) (2026-08-14)
 
 
